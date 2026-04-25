@@ -1230,7 +1230,712 @@
 // export default GameScreen;
 
 
-// code 3
+// // code 3
+// // src/screens/GameScreen.js - COMPLETE REPLACEMENT
+// import React, { useState, useCallback, useEffect, useRef } from 'react';
+// import {
+//   View,
+//   Text,
+//   StyleSheet,
+//   TouchableOpacity,
+//   Alert,
+//   Dimensions,
+//   ActivityIndicator,
+//   Animated,
+// } from 'react-native';
+// import HexBoard from '../game/HexBoard';
+// import MoveEngine from '../game/MoveEngine';
+// import GameBoard from '../components/GameBoard';
+// import AIPlayer from '../ai/AIPlayer';
+// import soundManager from '../utils/SoundManager';
+
+// const { width: SCREEN_WIDTH } = Dimensions.get('window');
+
+// function GameScreen({ route, navigation }) {
+//   const { mode, difficulty } = route.params;
+
+//   // Game State
+//   const [board, setBoard] = useState(() => new HexBoard());
+//   const [selectedMarbles, setSelectedMarbles] = useState([]);
+//   const [validMoves, setValidMoves] = useState([]);
+//   const [highlightCells, setHighlightCells] = useState([]);
+//   const [gameOver, setGameOver] = useState(false);
+//   const [message, setMessage] = useState('');
+//   const [aiThinking, setAiThinking] = useState(false);
+//   const [lastPushOff, setLastPushOff] = useState(false);
+
+//   // AI ref
+//   const aiRef = useRef(
+//     mode === 'ai' ? new AIPlayer(difficulty || 'easy') : null
+//   );
+
+//   // Animations
+//   const pushAnim = useRef(new Animated.Value(0)).current;
+//   const scoreAnim = useRef(new Animated.Value(1)).current;
+
+//   const currentPlayer = board.currentPlayer;
+//   const isAITurn = mode === 'ai' && currentPlayer === 2 && !gameOver;
+
+//   // ===== Sound Initialize =====
+//   useEffect(() => {
+//     soundManager.init();
+//     return () => {
+//       // Screen leave karne par sounds stop karo (release mat karo - reuse hoga)
+//       soundManager.stopAll();
+//     };
+//   }, []);
+
+//   // Push off animation
+//   useEffect(() => {
+//     if (lastPushOff) {
+//       Animated.sequence([
+//         Animated.timing(scoreAnim, {
+//           toValue: 1.3,
+//           duration: 200,
+//           useNativeDriver: true,
+//         }),
+//         Animated.timing(scoreAnim, {
+//           toValue: 1,
+//           duration: 200,
+//           useNativeDriver: true,
+//         }),
+//       ]).start();
+//       setLastPushOff(false);
+//     }
+//   }, [lastPushOff]);
+
+//   // Update message
+//   useEffect(() => {
+//     if (gameOver) return;
+//     if (aiThinking) {
+//       setMessage('🤖 AI is thinking...');
+//       return;
+//     }
+
+//     const playerIcon = currentPlayer === 1 ? '⚪' : '⚫';
+//     const playerName = currentPlayer === 1 ? 'Player 1' : 
+//       (mode === 'ai' ? 'AI' : 'Player 2');
+
+//     if (selectedMarbles.length === 0) {
+//       setMessage(`${playerIcon} ${playerName}'s turn - Select marble(s)`);
+//     } else {
+//       setMessage(
+//         `${selectedMarbles.length} marble(s) selected - Choose direction`
+//       );
+//     }
+//   }, [selectedMarbles, currentPlayer, gameOver, aiThinking]);
+
+//   // Check win
+//   useEffect(() => {
+//     const winner = MoveEngine.checkWin(board);
+//     if (winner) {
+//       setGameOver(true);
+//       const winnerName = winner === 1 ? 'Player 1' : 
+//         (mode === 'ai' ? 'AI' : 'Player 2');
+//       setMessage(`🏆 ${winnerName} Wins!`);
+
+//       // Win/Lose sound
+//       if (mode === 'ai') {
+//         winner === 1 ? soundManager.playWin() : soundManager.playLose();
+//       } else {
+//         soundManager.playWin();
+//       }
+
+//       setTimeout(() => {
+//         Alert.alert(
+//           '🏆 Game Over!',
+//           `${winnerName} wins by pushing 6 marbles off the board!`,
+//           [
+//             { text: '🔄 New Game', onPress: resetGame },
+//             { text: '🏠 Menu', onPress: () => navigation.goBack() },
+//           ]
+//         );
+//       }, 500);
+//     }
+//   }, [board]);
+
+//   // ===== AI TURN =====
+//   useEffect(() => {
+//     if (!isAITurn || gameOver) return;
+
+//     setAiThinking(true);
+
+//     const timer = setTimeout(() => {
+//       try {
+//         const ai = aiRef.current;
+//         const move = ai.getBestMove(board);
+
+//         if (move) {
+//           const newBoard = board.clone();
+//           MoveEngine.executeMove(newBoard, move);
+
+//           setBoard(newBoard);
+//           setSelectedMarbles([]);
+//           setValidMoves([]);
+//           setHighlightCells([]);
+
+//           if (move.pushOff) {
+//             setLastPushOff(true);
+//             setMessage('💥 AI pushed your marble off!');
+//             soundManager.playMarbleFall();
+//           } else if (move.push > 0) {
+//             soundManager.playMarblePush();
+//           } else {
+//             soundManager.playMarbleMove();
+//           }
+//         }
+//       } catch (error) {
+//         console.log('AI Error:', error);
+//         // Fallback to random move
+//         const allMoves = MoveEngine.getAllValidMoves(board, 2);
+//         if (allMoves.length > 0) {
+//           const randomMove = allMoves[Math.floor(Math.random() * allMoves.length)];
+//           const newBoard = board.clone();
+//           MoveEngine.executeMove(newBoard, randomMove);
+//           setBoard(newBoard);
+//           setSelectedMarbles([]);
+//           setValidMoves([]);
+//           setHighlightCells([]);
+//         }
+//       }
+
+//       setAiThinking(false);
+//     }, difficulty === 'hard' ? 1500 : difficulty === 'medium' ? 1000 : 600);
+
+//     return () => clearTimeout(timer);
+//   }, [isAITurn, board, gameOver]);
+
+//   // ===== CELL PRESS HANDLER =====
+//   const onCellPress = useCallback((q, r, s) => {
+//     if (gameOver || isAITurn || aiThinking) return;
+
+//     const cell = board.getCell(q, r, s);
+//     if (!cell) return;
+
+//     const marbleCoord = { q, r, s };
+
+//     // CLICKING OWN MARBLE - Select/Deselect
+//     if (cell.marble === currentPlayer) {
+//       const alreadyIdx = selectedMarbles.findIndex(
+//         m => m.q === q && m.r === r && m.s === s
+//       );
+
+//       let newSelected;
+//       if (alreadyIdx !== -1) {
+//         // Deselect
+//         newSelected = selectedMarbles.filter((_, i) => i !== alreadyIdx);
+//         soundManager.playMarbleClick();
+//       } else if (selectedMarbles.length < 3) {
+//         newSelected = [...selectedMarbles, marbleCoord];
+//         soundManager.playMarbleSelect();
+
+//         // Validate: must be in line and adjacent
+//         if (newSelected.length > 1) {
+//           if (!MoveEngine.areInLine(newSelected)) {
+//             setMessage('❌ Marbles must be in a straight line!');
+//             soundManager.playInvalidMove();
+//             return;
+//           }
+//           const sorted = MoveEngine.sortByPosition(newSelected);
+//           for (let i = 0; i < sorted.length - 1; i++) {
+//             if (!MoveEngine.areAdjacent(sorted[i], sorted[i + 1])) {
+//               setMessage('❌ Marbles must be next to each other!');
+//               soundManager.playInvalidMove();
+//               return;
+//             }
+//           }
+//         }
+//       } else {
+//         setMessage('⚠️ Maximum 3 marbles can be selected!');
+//         soundManager.playInvalidMove();
+//         return;
+//       }
+
+//       setSelectedMarbles(newSelected);
+//       updateValidMoves(newSelected);
+//       return;
+//     }
+
+//     // CLICKING EMPTY/OPPONENT CELL - Try to move
+//     if (selectedMarbles.length > 0 && validMoves.length > 0) {
+//       // Find matching move
+//       for (const move of validMoves) {
+//         const dir = MoveEngine.getDirectionDelta(move.direction);
+//         if (!dir) continue;
+
+//         // Check if click matches any marble's destination
+//         let matches = false;
+
+//         if (move.type === 'inline') {
+//           // For inline, check front marble's destination
+//           const front = MoveEngine.getFrontMarble(selectedMarbles, move.direction);
+//           const destQ = front.q + dir[0];
+//           const destR = front.r + dir[1];
+//           const destS = front.s + dir[2];
+//           if (destQ === q && destR === r && destS === s) {
+//             matches = true;
+//           }
+//         } else {
+//           // For broadside, check any marble's destination
+//           matches = selectedMarbles.some(m => {
+//             return (m.q + dir[0]) === q && (m.r + dir[1]) === r && (m.s + dir[2]) === s;
+//           });
+//         }
+
+//         if (matches) {
+//           executeMove(move);
+//           return;
+//         }
+//       }
+//     }
+
+//     // Clicking nothing useful - clear selection
+//     if (cell.marble === null && selectedMarbles.length === 0) {
+//       setSelectedMarbles([]);
+//       setValidMoves([]);
+//       setHighlightCells([]);
+//     }
+//   }, [board, selectedMarbles, validMoves, currentPlayer, gameOver, isAITurn, aiThinking]);
+
+//   // Update valid moves and highlights
+//   const updateValidMoves = useCallback((selected) => {
+//     if (selected.length === 0) {
+//       setValidMoves([]);
+//       setHighlightCells([]);
+//       return;
+//     }
+
+//     const moves = MoveEngine.getValidMoves(board, selected, currentPlayer);
+//     setValidMoves(moves);
+
+//     // Calculate highlight cells
+//     const highlights = [];
+//     const highlightSet = new Set();
+
+//     moves.forEach(move => {
+//       const dir = MoveEngine.getDirectionDelta(move.direction);
+//       if (!dir) return;
+
+//       if (move.type === 'inline') {
+//         const front = MoveEngine.getFrontMarble(selected, move.direction);
+//         const hq = front.q + dir[0];
+//         const hr = front.r + dir[1];
+//         const hs = front.s + dir[2];
+//         const hKey = `${hq},${hr},${hs}`;
+//         if (!highlightSet.has(hKey) && board.isValidPosition(hq, hr, hs)) {
+//           highlightSet.add(hKey);
+//           highlights.push({
+//             q: hq, r: hr, s: hs,
+//             isPush: move.push > 0,
+//             isPushOff: move.pushOff,
+//           });
+//         }
+//       } else {
+//         selected.forEach(m => {
+//           const hq = m.q + dir[0];
+//           const hr = m.r + dir[1];
+//           const hs = m.s + dir[2];
+//           const hKey = `${hq},${hr},${hs}`;
+//           if (!highlightSet.has(hKey) && board.isValidPosition(hq, hr, hs)) {
+//             const isOwnMarble = selected.some(
+//               sm => sm.q === hq && sm.r === hr && sm.s === hs
+//             );
+//             if (!isOwnMarble) {
+//               highlightSet.add(hKey);
+//               highlights.push({ q: hq, r: hr, s: hs, isPush: false, isPushOff: false });
+//             }
+//           }
+//         });
+//       }
+//     });
+
+//     setHighlightCells(highlights);
+//   }, [board, currentPlayer]);
+
+//   // Execute move
+//   const executeMove = useCallback((move) => {
+//     const newBoard = board.clone();
+//     MoveEngine.executeMove(newBoard, move);
+
+//     setBoard(newBoard);
+//     setSelectedMarbles([]);
+//     setValidMoves([]);
+//     setHighlightCells([]);
+
+//     if (move.pushOff) {
+//       setLastPushOff(true);
+//       setMessage('💥 Marble pushed off the board!');
+//       soundManager.playMarbleFall();
+//     } else if (move.push > 0) {
+//       setMessage('👊 Marble pushed!');
+//       soundManager.playMarblePush();
+//     } else {
+//       soundManager.playMarbleMove();
+//     }
+//   }, [board]);
+
+//   // Reset
+//   const resetGame = () => {
+//     setBoard(new HexBoard());
+//     setSelectedMarbles([]);
+//     setValidMoves([]);
+//     setHighlightCells([]);
+//     setGameOver(false);
+//     setAiThinking(false);
+//     setLastPushOff(false);
+//     if (aiRef.current) {
+//       aiRef.current.transpositionTable = {};
+//     }
+//   };
+
+//   return (
+//     <View style={styles.container}>
+//       {/* Header */}
+//       <View style={styles.header}>
+//         <TouchableOpacity style={styles.headerBtn} onPress={() => navigation.goBack()}>
+//           <Text style={styles.headerBtnText}>← Back</Text>
+//         </TouchableOpacity>
+
+//         <Text style={styles.modeText}>
+//           {mode === 'ai' ? `🤖 vs AI (${difficulty})` : '👥 2 Player'}
+//         </Text>
+
+//         <TouchableOpacity style={styles.headerBtn} onPress={resetGame}>
+//           <Text style={styles.headerBtnText}>🔄 New</Text>
+//         </TouchableOpacity>
+//       </View>
+
+//       {/* Score Board */}
+//       <View style={styles.scoreRow}>
+//         <Animated.View style={[
+//           styles.scoreCard,
+//           currentPlayer === 1 && styles.activeScoreCard,
+//           currentPlayer === 1 && { transform: [{ scale: scoreAnim }] },
+//         ]}>
+//           <View style={[styles.marbleIcon, { backgroundColor: '#F0F0F0' }]} />
+//           <Text style={styles.playerLabel}>
+//             {currentPlayer === 1 ? '▶ ' : ''}Player 1
+//           </Text>
+//           <Text style={styles.scoreValue}>{board.player1Score}</Text>
+//           <Text style={styles.scoreMax}>/ 6</Text>
+//         </Animated.View>
+
+//         <View style={styles.turnIndicator}>
+//           <Text style={styles.turnEmoji}>
+//             {aiThinking ? '🤔' : currentPlayer === 1 ? '⚪' : '⚫'}
+//           </Text>
+//           <Text style={styles.turnLabel}>
+//             {aiThinking ? 'Thinking' : 'Turn'}
+//           </Text>
+//         </View>
+
+//         <Animated.View style={[
+//           styles.scoreCard,
+//           currentPlayer === 2 && styles.activeScoreCard,
+//           currentPlayer === 2 && { transform: [{ scale: scoreAnim }] },
+//         ]}>
+//           <View style={[styles.marbleIcon, { backgroundColor: '#333' }]} />
+//           <Text style={styles.playerLabel}>
+//             {currentPlayer === 2 ? '▶ ' : ''}
+//             {mode === 'ai' ? 'AI' : 'Player 2'}
+//           </Text>
+//           <Text style={styles.scoreValue}>{board.player2Score}</Text>
+//           <Text style={styles.scoreMax}>/ 6</Text>
+//         </Animated.View>
+//       </View>
+
+//       {/* Game Board */}
+//       <View style={styles.boardWrapper}>
+//         {aiThinking && (
+//           <View style={styles.thinkingOverlay}>
+//             <ActivityIndicator size="large" color="#FFD700" />
+//           </View>
+//         )}
+//         <GameBoard
+//           board={board}
+//           selectedMarbles={selectedMarbles}
+//           highlightCells={highlightCells}
+//           onCellPress={onCellPress}
+//           disabled={isAITurn || gameOver || aiThinking}
+//         />
+//       </View>
+
+//       {/* Message Bar */}
+//       <View style={[
+//         styles.messageBar,
+//         lastPushOff && styles.messageBarAlert,
+//         gameOver && styles.messageBarWin,
+//       ]}>
+//         <Text style={styles.messageText}>{message}</Text>
+//       </View>
+
+//       {/* Controls */}
+//       <View style={styles.controls}>
+//         {selectedMarbles.length > 0 && !aiThinking && (
+//           <TouchableOpacity
+//             style={styles.clearBtn}
+//             onPress={() => {
+//               setSelectedMarbles([]);
+//               setValidMoves([]);
+//               setHighlightCells([]);
+//             }}
+//           >
+//             <Text style={styles.clearBtnText}>✕ Clear</Text>
+//           </TouchableOpacity>
+//         )}
+
+//         {validMoves.length > 0 && !aiThinking && (
+//           <Text style={styles.movesInfo}>
+//             {validMoves.length} move{validMoves.length > 1 ? 's' : ''} •{' '}
+//             {validMoves.filter(m => m.push > 0).length} push
+//           </Text>
+//         )}
+//       </View>
+
+//       {/* Direction Buttons */}
+//       {selectedMarbles.length > 0 && validMoves.length > 0 && !aiThinking && (
+//         <View style={styles.dirContainer}>
+//           <View style={styles.dirRow}>
+//             {validMoves.map((move, idx) => (
+//               <TouchableOpacity
+//                 key={idx}
+//                 style={[
+//                   styles.dirBtn,
+//                   move.pushOff && styles.dirBtnDanger,
+//                   move.push > 0 && !move.pushOff && styles.dirBtnPush,
+//                 ]}
+//                 onPress={() => executeMove(move)}
+//                 activeOpacity={0.7}
+//               >
+//                 <Text style={styles.dirArrow}>
+//                   {getDirEmoji(move.direction)}
+//                 </Text>
+//                 <Text style={styles.dirLabel}>
+//                   {move.push > 0
+//                     ? move.pushOff
+//                       ? `💥 Push Off!`
+//                       : `👊 Push ${move.push}`
+//                     : getDirName(move.direction)}
+//                 </Text>
+//               </TouchableOpacity>
+//             ))}
+//           </View>
+//         </View>
+//       )}
+//     </View>
+//   );
+// }
+
+// function getDirEmoji(dir) {
+//   const e = {
+//     right: '➡️', topRight: '↗️', topLeft: '↖️',
+//     left: '⬅️', bottomLeft: '↙️', bottomRight: '↘️',
+//   };
+//   return e[dir] || '•';
+// }
+
+// function getDirName(dir) {
+//   const n = {
+//     right: 'Right', topRight: 'Top-R', topLeft: 'Top-L',
+//     left: 'Left', bottomLeft: 'Bot-L', bottomRight: 'Bot-R',
+//   };
+//   return n[dir] || dir;
+// }
+
+// const styles = StyleSheet.create({
+//   container: {
+//     flex: 1,
+//     backgroundColor: '#0d0d1a',
+//   },
+//   header: {
+//     flexDirection: 'row',
+//     alignItems: 'center',
+//     justifyContent: 'space-between',
+//     paddingHorizontal: 12,
+//     paddingTop: 42,
+//     paddingBottom: 8,
+//     backgroundColor: '#111128',
+//     borderBottomWidth: 1,
+//     borderBottomColor: '#222',
+//   },
+//   headerBtn: {
+//     paddingVertical: 6,
+//     paddingHorizontal: 12,
+//   },
+//   headerBtnText: {
+//     color: '#FFD700',
+//     fontSize: 14,
+//     fontWeight: '600',
+//   },
+//   modeText: {
+//     color: '#FFF',
+//     fontSize: 15,
+//     fontWeight: '600',
+//   },
+//   scoreRow: {
+//     flexDirection: 'row',
+//     alignItems: 'center',
+//     justifyContent: 'center',
+//     paddingHorizontal: 15,
+//     paddingVertical: 12,
+//   },
+//   scoreCard: {
+//     flex: 1,
+//     backgroundColor: '#151530',
+//     borderRadius: 14,
+//     paddingVertical: 10,
+//     alignItems: 'center',
+//     borderWidth: 2,
+//     borderColor: '#252550',
+//   },
+//   activeScoreCard: {
+//     borderColor: '#FFD700',
+//     backgroundColor: '#1a1a40',
+//   },
+//   marbleIcon: {
+//     width: 20,
+//     height: 20,
+//     borderRadius: 10,
+//     marginBottom: 4,
+//     borderWidth: 1,
+//     borderColor: '#555',
+//   },
+//   playerLabel: {
+//     color: '#AAA',
+//     fontSize: 11,
+//     fontWeight: '600',
+//   },
+//   scoreValue: {
+//     color: '#FFD700',
+//     fontSize: 28,
+//     fontWeight: 'bold',
+//     marginTop: 2,
+//   },
+//   scoreMax: {
+//     color: '#555',
+//     fontSize: 12,
+//   },
+//   turnIndicator: {
+//     alignItems: 'center',
+//     paddingHorizontal: 15,
+//   },
+//   turnEmoji: {
+//     fontSize: 28,
+//   },
+//   turnLabel: {
+//     color: '#666',
+//     fontSize: 10,
+//     marginTop: 2,
+//   },
+//   boardWrapper: {
+//     alignItems: 'center',
+//     justifyContent: 'center',
+//     position: 'relative',
+//   },
+//   thinkingOverlay: {
+//     position: 'absolute',
+//     top: 0,
+//     left: 0,
+//     right: 0,
+//     bottom: 0,
+//     zIndex: 10,
+//     alignItems: 'center',
+//     justifyContent: 'center',
+//     backgroundColor: 'rgba(0,0,0,0.3)',
+//     borderRadius: 20,
+//   },
+//   messageBar: {
+//     backgroundColor: '#1a1a30',
+//     marginHorizontal: 15,
+//     marginTop: 8,
+//     paddingVertical: 10,
+//     paddingHorizontal: 15,
+//     borderRadius: 10,
+//     alignItems: 'center',
+//     borderWidth: 1,
+//     borderColor: '#252550',
+//   },
+//   messageBarAlert: {
+//     backgroundColor: '#2a1a0a',
+//     borderColor: '#FF6600',
+//   },
+//   messageBarWin: {
+//     backgroundColor: '#1a2a0a',
+//     borderColor: '#66FF00',
+//   },
+//   messageText: {
+//     color: '#FFF',
+//     fontSize: 13,
+//     fontWeight: '500',
+//     textAlign: 'center',
+//   },
+//   controls: {
+//     flexDirection: 'row',
+//     justifyContent: 'center',
+//     alignItems: 'center',
+//     paddingTop: 8,
+//     paddingHorizontal: 20,
+//     gap: 15,
+//   },
+//   clearBtn: {
+//     backgroundColor: '#2a2a40',
+//     paddingVertical: 7,
+//     paddingHorizontal: 18,
+//     borderRadius: 20,
+//     borderWidth: 1,
+//     borderColor: '#444',
+//   },
+//   clearBtnText: {
+//     color: '#FFF',
+//     fontSize: 12,
+//     fontWeight: '600',
+//   },
+//   movesInfo: {
+//     color: '#FFD700',
+//     fontSize: 12,
+//   },
+//   dirContainer: {
+//     paddingHorizontal: 10,
+//     paddingTop: 8,
+//     paddingBottom: 15,
+//   },
+//   dirRow: {
+//     flexDirection: 'row',
+//     flexWrap: 'wrap',
+//     justifyContent: 'center',
+//     gap: 6,
+//   },
+//   dirBtn: {
+//     backgroundColor: '#1a1a35',
+//     borderWidth: 1.5,
+//     borderColor: '#FFD700',
+//     borderRadius: 10,
+//     paddingVertical: 8,
+//     paddingHorizontal: 10,
+//     alignItems: 'center',
+//     minWidth: 75,
+//   },
+//   dirBtnPush: {
+//     borderColor: '#FF9800',
+//     backgroundColor: '#251a0a',
+//   },
+//   dirBtnDanger: {
+//     borderColor: '#FF4444',
+//     backgroundColor: '#2a0a0a',
+//   },
+//   dirArrow: {
+//     fontSize: 18,
+//   },
+//   dirLabel: {
+//     color: '#CCC',
+//     fontSize: 9,
+//     marginTop: 2,
+//     textAlign: 'center',
+//   },
+// });
+
+// export default GameScreen;
+
 // src/screens/GameScreen.js - COMPLETE REPLACEMENT
 import React, { useState, useCallback, useEffect, useRef } from 'react';
 import {
@@ -1588,67 +2293,115 @@ function GameScreen({ route, navigation }) {
     }
   };
 
+
+  // ===== Progress bar width helper =====
+  const progressWidth = (score) => `${Math.min((score / 6) * 100, 100)}%`;
+
   return (
     <View style={styles.container}>
-      {/* Header */}
+
+      {/* ── HEADER ── */}
       <View style={styles.header}>
-        <TouchableOpacity style={styles.headerBtn} onPress={() => navigation.goBack()}>
-          <Text style={styles.headerBtnText}>← Back</Text>
+        <TouchableOpacity
+          style={styles.headerBtn}
+          onPress={() => { soundManager.playButtonTap(); navigation.goBack(); }}
+        >
+          <Text style={styles.headerBtnText}>← Menu</Text>
         </TouchableOpacity>
 
-        <Text style={styles.modeText}>
-          {mode === 'ai' ? `🤖 vs AI (${difficulty})` : '👥 2 Player'}
-        </Text>
-
-        <TouchableOpacity style={styles.headerBtn} onPress={resetGame}>
-          <Text style={styles.headerBtnText}>🔄 New</Text>
-        </TouchableOpacity>
-      </View>
-
-      {/* Score Board */}
-      <View style={styles.scoreRow}>
-        <Animated.View style={[
-          styles.scoreCard,
-          currentPlayer === 1 && styles.activeScoreCard,
-          currentPlayer === 1 && { transform: [{ scale: scoreAnim }] },
-        ]}>
-          <View style={[styles.marbleIcon, { backgroundColor: '#F0F0F0' }]} />
-          <Text style={styles.playerLabel}>
-            {currentPlayer === 1 ? '▶ ' : ''}Player 1
-          </Text>
-          <Text style={styles.scoreValue}>{board.player1Score}</Text>
-          <Text style={styles.scoreMax}>/ 6</Text>
-        </Animated.View>
-
-        <View style={styles.turnIndicator}>
-          <Text style={styles.turnEmoji}>
-            {aiThinking ? '🤔' : currentPlayer === 1 ? '⚪' : '⚫'}
-          </Text>
-          <Text style={styles.turnLabel}>
-            {aiThinking ? 'Thinking' : 'Turn'}
+        <View style={styles.headerCenter}>
+          <Text style={styles.modeText}>
+            {mode === 'ai' ? `🤖 AI · ${difficulty}` : '👥 Local 2P'}
           </Text>
         </View>
 
+        <TouchableOpacity
+          style={styles.headerBtn}
+          onPress={() => { soundManager.playButtonTap(); resetGame(); }}
+        >
+          <Text style={styles.headerBtnText}>🔄 Reset</Text>
+        </TouchableOpacity>
+      </View>
+
+      {/* ── SCORE PANEL ── */}
+      <View style={styles.scorePanel}>
+
+        {/* Player 1 card */}
         <Animated.View style={[
-          styles.scoreCard,
-          currentPlayer === 2 && styles.activeScoreCard,
-          currentPlayer === 2 && { transform: [{ scale: scoreAnim }] },
+          styles.playerCard,
+          currentPlayer === 1 && !gameOver && styles.playerCardActive,
+          { transform: currentPlayer === 1 ? [{ scale: scoreAnim }] : [] },
         ]}>
-          <View style={[styles.marbleIcon, { backgroundColor: '#333' }]} />
-          <Text style={styles.playerLabel}>
-            {currentPlayer === 2 ? '▶ ' : ''}
+          {/* Marble count dots */}
+          <View style={styles.marbleCountRow}>
+            {Array.from({ length: board.player1Marbles.length }).map((_, i) => (
+              <View key={i} style={[styles.marbleDot, { backgroundColor: '#EFEFEF' }]} />
+            ))}
+          </View>
+          <Text style={styles.playerName}>
+            {currentPlayer === 1 && !gameOver ? '▶ ' : ''}Player 1
+          </Text>
+          <Text style={styles.scoreBig}>{board.player1Score}</Text>
+          <Text style={styles.scoreLabel}>pushed off</Text>
+          {/* Progress bar */}
+          <View style={styles.progressTrack}>
+            <View style={[styles.progressFill,
+              { width: progressWidth(board.player1Score), backgroundColor: '#EFEFEF' }
+            ]} />
+          </View>
+        </Animated.View>
+
+        {/* Centre turn badge */}
+        <View style={styles.turnBadge}>
+          {aiThinking ? (
+            <>
+              <ActivityIndicator size="small" color="#FFD700" />
+              <Text style={styles.turnBadgeLabel}>AI{'\n'}thinking</Text>
+            </>
+          ) : (
+            <>
+              <View style={[
+                styles.turnMarble,
+                { backgroundColor: currentPlayer === 1 ? '#EFEFEF' : '#222' },
+              ]} />
+              <Text style={styles.turnBadgeLabel}>
+                {gameOver ? '🏆' : 'turn'}
+              </Text>
+            </>
+          )}
+        </View>
+
+        {/* Player 2 card */}
+        <Animated.View style={[
+          styles.playerCard,
+          currentPlayer === 2 && !gameOver && styles.playerCardActive,
+          { transform: currentPlayer === 2 ? [{ scale: scoreAnim }] : [] },
+        ]}>
+          <View style={styles.marbleCountRow}>
+            {Array.from({ length: board.player2Marbles.length }).map((_, i) => (
+              <View key={i} style={[styles.marbleDot, { backgroundColor: '#333' }]} />
+            ))}
+          </View>
+          <Text style={styles.playerName}>
+            {currentPlayer === 2 && !gameOver ? '▶ ' : ''}
             {mode === 'ai' ? 'AI' : 'Player 2'}
           </Text>
-          <Text style={styles.scoreValue}>{board.player2Score}</Text>
-          <Text style={styles.scoreMax}>/ 6</Text>
+          <Text style={styles.scoreBig}>{board.player2Score}</Text>
+          <Text style={styles.scoreLabel}>pushed off</Text>
+          <View style={styles.progressTrack}>
+            <View style={[styles.progressFill,
+              { width: progressWidth(board.player2Score), backgroundColor: '#888' }
+            ]} />
+          </View>
         </Animated.View>
       </View>
 
-      {/* Game Board */}
+      {/* ── BOARD ── */}
       <View style={styles.boardWrapper}>
         {aiThinking && (
           <View style={styles.thinkingOverlay}>
             <ActivityIndicator size="large" color="#FFD700" />
+            <Text style={styles.thinkingText}>AI thinking…</Text>
           </View>
         )}
         <GameBoard
@@ -1660,7 +2413,7 @@ function GameScreen({ route, navigation }) {
         />
       </View>
 
-      {/* Message Bar */}
+      {/* ── MESSAGE BAR ── */}
       <View style={[
         styles.messageBar,
         lastPushOff && styles.messageBarAlert,
@@ -1669,33 +2422,38 @@ function GameScreen({ route, navigation }) {
         <Text style={styles.messageText}>{message}</Text>
       </View>
 
-      {/* Controls */}
-      <View style={styles.controls}>
-        {selectedMarbles.length > 0 && !aiThinking && (
-          <TouchableOpacity
-            style={styles.clearBtn}
-            onPress={() => {
-              setSelectedMarbles([]);
-              setValidMoves([]);
-              setHighlightCells([]);
-            }}
-          >
-            <Text style={styles.clearBtnText}>✕ Clear</Text>
-          </TouchableOpacity>
+      {/* ── BOTTOM CONTROLS ── */}
+      <View style={styles.bottomBar}>
+
+        {/* Selection info + clear */}
+        {selectedMarbles.length > 0 && !aiThinking && !gameOver && (
+          <View style={styles.selectionRow}>
+            <Text style={styles.selectionInfo}>
+              {selectedMarbles.length} marble{selectedMarbles.length > 1 ? 's' : ''} selected
+              {validMoves.length > 0
+                ? `  ·  ${validMoves.length} move${validMoves.length > 1 ? 's' : ''}`
+                : '  ·  no valid moves'}
+              {validMoves.filter(m => m.push > 0).length > 0
+                ? `  ·  ${validMoves.filter(m => m.push > 0).length} push`
+                : ''}
+            </Text>
+            <TouchableOpacity
+              style={styles.clearBtn}
+              onPress={() => {
+                soundManager.playButtonTap();
+                setSelectedMarbles([]);
+                setValidMoves([]);
+                setHighlightCells([]);
+              }}
+            >
+              <Text style={styles.clearBtnText}>✕ Clear</Text>
+            </TouchableOpacity>
+          </View>
         )}
 
-        {validMoves.length > 0 && !aiThinking && (
-          <Text style={styles.movesInfo}>
-            {validMoves.length} move{validMoves.length > 1 ? 's' : ''} •{' '}
-            {validMoves.filter(m => m.push > 0).length} push
-          </Text>
-        )}
-      </View>
-
-      {/* Direction Buttons */}
-      {selectedMarbles.length > 0 && validMoves.length > 0 && !aiThinking && (
-        <View style={styles.dirContainer}>
-          <View style={styles.dirRow}>
+        {/* Direction buttons */}
+        {selectedMarbles.length > 0 && validMoves.length > 0 && !aiThinking && !gameOver && (
+          <View style={styles.dirGrid}>
             {validMoves.map((move, idx) => (
               <TouchableOpacity
                 key={idx}
@@ -1705,23 +2463,29 @@ function GameScreen({ route, navigation }) {
                   move.push > 0 && !move.pushOff && styles.dirBtnPush,
                 ]}
                 onPress={() => executeMove(move)}
-                activeOpacity={0.7}
+                activeOpacity={0.75}
               >
-                <Text style={styles.dirArrow}>
-                  {getDirEmoji(move.direction)}
-                </Text>
+                <Text style={styles.dirArrow}>{getDirEmoji(move.direction)}</Text>
                 <Text style={styles.dirLabel}>
-                  {move.push > 0
-                    ? move.pushOff
-                      ? `💥 Push Off!`
-                      : `👊 Push ${move.push}`
-                    : getDirName(move.direction)}
+                  {move.pushOff
+                    ? '💥 Off!'
+                    : move.push > 0
+                      ? `👊 ×${move.push}`
+                      : getDirShort(move.direction)}
                 </Text>
               </TouchableOpacity>
             ))}
           </View>
-        </View>
-      )}
+        )}
+
+        {/* Idle hint */}
+        {selectedMarbles.length === 0 && !gameOver && !aiThinking && (
+          <Text style={styles.hintText}>
+            Tap a {currentPlayer === 1 ? '⚪ white' : '⚫ black'} marble to select
+          </Text>
+        )}
+      </View>
+
     </View>
   );
 }
@@ -1734,7 +2498,7 @@ function getDirEmoji(dir) {
   return e[dir] || '•';
 }
 
-function getDirName(dir) {
+function getDirShort(dir) {
   const n = {
     right: 'Right', topRight: 'Top-R', topLeft: 'Top-L',
     left: 'Left', bottomLeft: 'Bot-L', bottomRight: 'Bot-R',
@@ -1743,194 +2507,186 @@ function getDirName(dir) {
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#0d0d1a',
-  },
+  container: { flex: 1, backgroundColor: '#0d0d1a' },
+
+  // ── Header ──
   header: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingHorizontal: 12,
-    paddingTop: 42,
-    paddingBottom: 8,
+    paddingHorizontal: 14,
+    paddingTop: 46,
+    paddingBottom: 10,
     backgroundColor: '#111128',
     borderBottomWidth: 1,
-    borderBottomColor: '#222',
+    borderBottomColor: '#1e1e3a',
   },
-  headerBtn: {
-    paddingVertical: 6,
-    paddingHorizontal: 12,
-  },
-  headerBtnText: {
-    color: '#FFD700',
-    fontSize: 14,
-    fontWeight: '600',
-  },
-  modeText: {
-    color: '#FFF',
-    fontSize: 15,
-    fontWeight: '600',
-  },
-  scoreRow: {
+  headerBtn: { paddingVertical: 6, paddingHorizontal: 10 },
+  headerBtnText: { color: '#FFD700', fontSize: 14, fontWeight: '600' },
+  headerCenter: { alignItems: 'center' },
+  modeText: { color: '#DDD', fontSize: 13, fontWeight: '600' },
+
+  // ── Score Panel ──
+  scorePanel: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'center',
-    paddingHorizontal: 15,
-    paddingVertical: 12,
-  },
-  scoreCard: {
-    flex: 1,
-    backgroundColor: '#151530',
-    borderRadius: 14,
+    paddingHorizontal: 12,
     paddingVertical: 10,
+    gap: 8,
+  },
+  playerCard: {
+    flex: 1,
+    backgroundColor: '#13132a',
+    borderRadius: 16,
+    paddingVertical: 10,
+    paddingHorizontal: 10,
     alignItems: 'center',
     borderWidth: 2,
-    borderColor: '#252550',
+    borderColor: '#1e1e3a',
   },
-  activeScoreCard: {
+  playerCardActive: {
     borderColor: '#FFD700',
-    backgroundColor: '#1a1a40',
+    backgroundColor: '#1a1a38',
+    shadowColor: '#FFD700',
+    shadowOpacity: 0.25,
+    shadowRadius: 8,
+    elevation: 6,
   },
-  marbleIcon: {
-    width: 20,
-    height: 20,
-    borderRadius: 10,
+  marbleCountRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    justifyContent: 'center',
+    gap: 2,
     marginBottom: 4,
-    borderWidth: 1,
+    minHeight: 14,
+  },
+  marbleDot: {
+    width: 7,
+    height: 7,
+    borderRadius: 3.5,
+    borderWidth: 0.5,
+    borderColor: '#444',
+  },
+  playerName: { color: '#AAA', fontSize: 11, fontWeight: '700', letterSpacing: 0.5 },
+  scoreBig: { color: '#FFD700', fontSize: 32, fontWeight: '900', lineHeight: 38 },
+  scoreLabel: { color: '#555', fontSize: 9, marginTop: -2, letterSpacing: 0.5 },
+  progressTrack: {
+    width: '100%',
+    height: 4,
+    backgroundColor: '#252545',
+    borderRadius: 2,
+    marginTop: 6,
+    overflow: 'hidden',
+  },
+  progressFill: { height: 4, borderRadius: 2 },
+
+  // ── Turn badge ──
+  turnBadge: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    width: 52,
+    gap: 4,
+  },
+  turnMarble: {
+    width: 26,
+    height: 26,
+    borderRadius: 13,
+    borderWidth: 2,
     borderColor: '#555',
   },
-  playerLabel: {
-    color: '#AAA',
-    fontSize: 11,
-    fontWeight: '600',
-  },
-  scoreValue: {
-    color: '#FFD700',
-    fontSize: 28,
-    fontWeight: 'bold',
-    marginTop: 2,
-  },
-  scoreMax: {
-    color: '#555',
-    fontSize: 12,
-  },
-  turnIndicator: {
-    alignItems: 'center',
-    paddingHorizontal: 15,
-  },
-  turnEmoji: {
-    fontSize: 28,
-  },
-  turnLabel: {
+  turnBadgeLabel: {
     color: '#666',
-    fontSize: 10,
-    marginTop: 2,
+    fontSize: 9,
+    textAlign: 'center',
+    letterSpacing: 0.5,
   },
+
+  // ── Board ──
   boardWrapper: {
     alignItems: 'center',
     justifyContent: 'center',
     position: 'relative',
+    flex: 1,
   },
   thinkingOverlay: {
     position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    bottom: 0,
+    top: 0, left: 0, right: 0, bottom: 0,
     zIndex: 10,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: 'rgba(0,0,0,0.3)',
+    backgroundColor: 'rgba(0,0,0,0.45)',
     borderRadius: 20,
+    gap: 10,
   },
+  thinkingText: { color: '#FFD700', fontSize: 13, fontWeight: '600' },
+
+  // ── Message bar ──
   messageBar: {
-    backgroundColor: '#1a1a30',
-    marginHorizontal: 15,
-    marginTop: 8,
-    paddingVertical: 10,
-    paddingHorizontal: 15,
-    borderRadius: 10,
+    backgroundColor: '#13132a',
+    marginHorizontal: 14,
+    marginTop: 6,
+    paddingVertical: 9,
+    paddingHorizontal: 16,
+    borderRadius: 12,
     alignItems: 'center',
     borderWidth: 1,
-    borderColor: '#252550',
+    borderColor: '#1e1e3a',
   },
-  messageBarAlert: {
-    backgroundColor: '#2a1a0a',
-    borderColor: '#FF6600',
+  messageBarAlert: { backgroundColor: '#2a1500', borderColor: '#FF6600' },
+  messageBarWin:   { backgroundColor: '#0d2a00', borderColor: '#66FF44' },
+  messageText: { color: '#EEE', fontSize: 13, fontWeight: '500', textAlign: 'center' },
+
+  // ── Bottom bar ──
+  bottomBar: {
+    paddingHorizontal: 12,
+    paddingTop: 6,
+    paddingBottom: 14,
   },
-  messageBarWin: {
-    backgroundColor: '#1a2a0a',
-    borderColor: '#66FF00',
-  },
-  messageText: {
-    color: '#FFF',
-    fontSize: 13,
-    fontWeight: '500',
-    textAlign: 'center',
-  },
-  controls: {
+  selectionRow: {
     flexDirection: 'row',
-    justifyContent: 'center',
     alignItems: 'center',
-    paddingTop: 8,
-    paddingHorizontal: 20,
-    gap: 15,
+    justifyContent: 'space-between',
+    marginBottom: 8,
+    paddingHorizontal: 4,
   },
+  selectionInfo: { color: '#888', fontSize: 11, flex: 1 },
   clearBtn: {
-    backgroundColor: '#2a2a40',
-    paddingVertical: 7,
-    paddingHorizontal: 18,
-    borderRadius: 20,
+    backgroundColor: '#252540',
+    paddingVertical: 5,
+    paddingHorizontal: 14,
+    borderRadius: 16,
     borderWidth: 1,
-    borderColor: '#444',
+    borderColor: '#3a3a60',
   },
-  clearBtnText: {
-    color: '#FFF',
-    fontSize: 12,
-    fontWeight: '600',
-  },
-  movesInfo: {
-    color: '#FFD700',
-    fontSize: 12,
-  },
-  dirContainer: {
-    paddingHorizontal: 10,
-    paddingTop: 8,
-    paddingBottom: 15,
-  },
-  dirRow: {
+  clearBtnText: { color: '#CCC', fontSize: 12, fontWeight: '600' },
+
+  // Direction buttons
+  dirGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
     justifyContent: 'center',
-    gap: 6,
+    gap: 7,
   },
   dirBtn: {
-    backgroundColor: '#1a1a35',
+    backgroundColor: '#16163a',
     borderWidth: 1.5,
     borderColor: '#FFD700',
-    borderRadius: 10,
-    paddingVertical: 8,
-    paddingHorizontal: 10,
+    borderRadius: 12,
+    paddingVertical: 9,
+    paddingHorizontal: 11,
     alignItems: 'center',
-    minWidth: 75,
+    minWidth: 72,
   },
-  dirBtnPush: {
-    borderColor: '#FF9800',
-    backgroundColor: '#251a0a',
-  },
-  dirBtnDanger: {
-    borderColor: '#FF4444',
-    backgroundColor: '#2a0a0a',
-  },
-  dirArrow: {
-    fontSize: 18,
-  },
-  dirLabel: {
-    color: '#CCC',
-    fontSize: 9,
-    marginTop: 2,
+  dirBtnPush:   { borderColor: '#FF9800', backgroundColor: '#221500' },
+  dirBtnDanger: { borderColor: '#FF4444', backgroundColor: '#220000' },
+  dirArrow: { fontSize: 18 },
+  dirLabel: { color: '#CCC', fontSize: 9, marginTop: 3, fontWeight: '600' },
+
+  hintText: {
     textAlign: 'center',
+    color: '#444',
+    fontSize: 12,
+    paddingVertical: 8,
   },
 });
 
